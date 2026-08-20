@@ -99,6 +99,16 @@
     margin-top:22px;font-family:var(--sans);font-size:11px;letter-spacing:.28em;text-transform:uppercase;color:var(--mute);
     opacity:0;animation:riseIn 1s 1.1s forwards ease-out;
   }
+  .hero-tagline{
+    margin-top:28px;font-family:var(--sans);font-weight:600;font-size:clamp(13px,2vw,17px);
+    letter-spacing:.4em;text-transform:uppercase;color:var(--ink);
+    opacity:0;animation:riseIn 1s 1.4s forwards ease-out;
+    position:relative;padding-top:22px;
+  }
+  .hero-tagline::before{
+    content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);
+    width:34px;height:1px;background:var(--ink);
+  }
   @keyframes inkIn{ from{opacity:0;filter:blur(10px);letter-spacing:8px;} to{opacity:1;filter:blur(0);letter-spacing:1px;} }
   @keyframes riseIn{ from{opacity:0;transform:translateY(14px);} to{opacity:1;transform:translateY(0);} }
 
@@ -274,6 +284,12 @@
   .an-top-row .an-t-name{font-family:var(--serif);font-style:italic;font-size:14.5px;flex:1;min-width:0;}
   .an-top-row .an-t-count{font-family:var(--sans);font-size:12px;color:var(--mute);flex-shrink:0;}
   .an-empty{font-family:var(--sans);font-size:11.5px;color:var(--mute);}
+  .edit-banner{
+    font-family:var(--sans);font-size:11.5px;color:var(--mute);background:var(--wash);
+    padding:10px 14px;margin-bottom:6px;
+  }
+  .edit-banner span{color:var(--ink);font-style:italic;font-family:var(--serif);}
+  .edit-banner a{border-bottom:1px solid var(--ink);color:var(--ink);}
   .admin-form label{display:block;font-family:var(--sans);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--mute);margin:18px 0 8px;}
   .admin-form input[type=text],.admin-form textarea{
     width:100%;border:none;border-bottom:1px solid var(--hair-strong);padding:10px 2px;font-family:var(--serif);font-size:17px;background:transparent;
@@ -311,7 +327,10 @@
   .admin-item .ai-t{font-family:var(--serif);font-style:italic;font-size:15px;}
   .admin-item .ai-c{font-family:var(--sans);font-size:10.5px;color:var(--mute);margin-top:2px;}
   .admin-item .ai-n{font-family:var(--sans);font-size:9.5px;color:#b8b8b4;margin-top:3px;letter-spacing:.05em;}
-  .admin-item .ai-del{margin-left:auto;font-family:var(--sans);font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:#a33;border-bottom:1px solid transparent;flex-shrink:0;}
+  .admin-item .ai-actions{margin-left:auto;display:flex;gap:16px;flex-shrink:0;}
+  .admin-item .ai-edit{font-family:var(--sans);font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--ink);border-bottom:1px solid transparent;}
+  .admin-item .ai-edit:hover{border-color:var(--ink);}
+  .admin-item .ai-del{font-family:var(--sans);font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:#a33;border-bottom:1px solid transparent;}
   .admin-item .ai-del:hover{border-color:#a33;}
   .admin-empty{font-family:var(--sans);font-size:11.5px;color:var(--mute);padding:20px 0;}
   @media(max-width:480px){
@@ -355,6 +374,7 @@
     <div class="hero-eyebrow">Design Studio · Est. Digital Atelier</div>
     <h1 class="hero-mark">Orod Mozafari</h1>
     <div class="hero-sub">Couture · Silhouette · Story</div>
+    <div class="hero-tagline">Beyond Ordinary</div>
   </section>
 
   <div class="marquee-band">
@@ -427,9 +447,8 @@
 <!-- ADMIN PASSWORD GATE -->
 <div class="pw-gate" id="pwGate" style="display:none;">
   <h2>Studio Access</h2>
-  <input type="email" id="pwEmail" placeholder="Email" autocomplete="username">
   <input type="password" id="pwInput" placeholder="Password" autocomplete="current-password">
-  <button id="pwSubmit">Sign in</button>
+  <button id="pwSubmit">Enter</button>
   <div class="pw-msg" id="pwMsg"></div>
 </div>
 
@@ -467,6 +486,9 @@
   </div>
   <div class="admin-grid">
     <div class="admin-form">
+      <div class="edit-banner" id="editBanner" style="display:none;">
+        Editing <span id="editBannerTitle"></span> — <a href="#" id="editCancel">Cancel</a>
+      </div>
       <label>Title</label>
       <input type="text" id="fTitle" placeholder="Piece name">
       <label>Caption</label>
@@ -493,6 +515,7 @@
   const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
   const BUCKET = 'orodmozafari';
   const TABLE = 'work';
+  const ADMIN_PASSWORD = 'OrodStudio26';
 
   let works = [];
   let pendingImages = []; // { blob, preview }
@@ -533,7 +556,7 @@
   const root = document.documentElement;
   const themeToggle = document.getElementById('themeToggle');
   function applyTheme(t){ root.setAttribute('data-theme', t); }
-  applyTheme(window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  applyTheme('light');
   themeToggle.addEventListener('click', ()=>{
     applyTheme(root.getAttribute('data-theme')==='dark' ? 'light' : 'dark');
   });
@@ -679,18 +702,17 @@
     });
   }
 
-  // ---------- admin: routing + real auth ----------
+  // ---------- admin: routing + password ----------
   const pwGate = document.getElementById('pwGate');
-  const pwEmail = document.getElementById('pwEmail');
   const pwInput = document.getElementById('pwInput');
   const pwSubmit = document.getElementById('pwSubmit');
   const pwMsg = document.getElementById('pwMsg');
   const adminShell = document.getElementById('adminShell');
+  let unlocked = false;
 
-  async function checkRoute(){
+  function checkRoute(){
     if(window.location.hash === '#admin'){
-      const { data: { session } } = await sb.auth.getSession();
-      if(session){
+      if(unlocked){
         pwGate.style.display='none';
         adminShell.classList.add('open');
         loadAnalytics();
@@ -698,7 +720,7 @@
         adminShell.classList.remove('open');
         pwGate.style.display='flex';
         pwInput.value=''; pwMsg.textContent='';
-        pwEmail.focus();
+        pwInput.focus();
       }
     } else {
       pwGate.style.display='none';
@@ -706,28 +728,22 @@
     }
   }
   window.addEventListener('hashchange', checkRoute);
-  sb.auth.onAuthStateChange(()=>{ checkRoute(); });
 
-  async function tryUnlock(){
-    pwMsg.textContent = 'Signing in…';
-    const { error } = await sb.auth.signInWithPassword({
-      email: pwEmail.value.trim(),
-      password: pwInput.value
-    });
-    if(error){
-      pwMsg.textContent = 'Incorrect email or password';
-    } else {
+  function tryUnlock(){
+    if(pwInput.value === ADMIN_PASSWORD){
+      unlocked = true;
       pwMsg.textContent = '';
       checkRoute();
+    } else {
+      pwMsg.textContent = 'Incorrect password';
     }
   }
   pwSubmit.addEventListener('click', tryUnlock);
-  pwEmail.addEventListener('keydown', (e)=>{ if(e.key==='Enter') pwInput.focus(); });
   pwInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter') tryUnlock(); });
 
-  document.getElementById('adminSignOut').addEventListener('click', async (e)=>{
+  document.getElementById('adminSignOut').addEventListener('click', (e)=>{
     e.preventDefault();
-    await sb.auth.signOut();
+    unlocked = false;
     window.location.hash = '#top';
   });
 
@@ -739,11 +755,45 @@
   const fSubmit = document.getElementById('fSubmit');
   const fStatus = document.getElementById('fStatus');
   const thumbGrid = document.getElementById('thumbGrid');
+  const editBanner = document.getElementById('editBanner');
+  const editBannerTitle = document.getElementById('editBannerTitle');
+  const editCancel = document.getElementById('editCancel');
   const removeIconSVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 5l14 14M19 5L5 19"/></svg>';
   const plusIconSVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 5v14M5 12h14"/></svg>';
   const playIconSVG = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
 
+  let editingId = null;
+  let existingMedia = []; // media already saved on the piece being edited: {url,type}
+
   dropZone.addEventListener('click', ()=> fFile.click());
+
+  function startEdit(w){
+    editingId = w.id;
+    existingMedia = getMedia(w).slice();
+    pendingImages = [];
+    fTitle.value = w.title;
+    fCaption.value = w.caption || '';
+    fSubmit.textContent = 'Save changes';
+    editBanner.style.display = 'block';
+    editBannerTitle.textContent = w.title;
+    fStatus.textContent = '';
+    renderThumbs();
+    updateSubmitState();
+    document.querySelector('.admin-form').scrollIntoView({ behavior:'smooth', block:'start' });
+  }
+
+  function resetForm(){
+    editingId = null;
+    existingMedia = [];
+    pendingImages = [];
+    fTitle.value = ''; fCaption.value = '';
+    fSubmit.textContent = 'Publish piece';
+    editBanner.style.display = 'none';
+    fStatus.textContent = '';
+    renderThumbs();
+    updateSubmitState();
+  }
+  editCancel.addEventListener('click', (e)=>{ e.preventDefault(); resetForm(); });
 
   function extFromMime(mime){
     const map = {
@@ -811,7 +861,11 @@
   });
 
   function renderThumbs(){
-    if(pendingImages.length===0){
+    const combined = [
+      ...existingMedia.map((m,i)=>({ kind:'existing', idx:i, type:m.type, preview:m.url })),
+      ...pendingImages.map((p,i)=>({ kind:'pending', idx:i, type:p.type, preview:p.preview }))
+    ];
+    if(combined.length===0){
       thumbGrid.style.display = 'none';
       dropZone.style.display = 'block';
       thumbGrid.innerHTML = '';
@@ -819,18 +873,20 @@
     }
     dropZone.style.display = 'none';
     thumbGrid.style.display = 'grid';
-    thumbGrid.innerHTML = pendingImages.map((p,i)=>`
+    thumbGrid.innerHTML = combined.map((item,pos)=>`
       <div class="thumb">
-        <img src="${p.preview}" alt="">
-        ${p.type==='video' ? `<div class="play-badge">${playIconSVG}</div>` : ''}
-        ${i===0 ? '<div class="cover-tag">COVER</div>' : ''}
-        <button class="thumb-remove" data-i="${i}" type="button">${removeIconSVG}</button>
+        <img src="${item.preview}" alt="">
+        ${item.type==='video' ? `<div class="play-badge">${playIconSVG}</div>` : ''}
+        ${pos===0 ? '<div class="cover-tag">COVER</div>' : ''}
+        <button class="thumb-remove" data-kind="${item.kind}" data-i="${item.idx}" type="button">${removeIconSVG}</button>
       </div>
     `).join('') + `<div class="thumb-add" id="thumbAdd">${plusIconSVG}</div>`;
     thumbGrid.querySelectorAll('.thumb-remove').forEach(btn=>{
       btn.addEventListener('click', (e)=>{
         e.stopPropagation();
-        pendingImages.splice(parseInt(btn.dataset.i,10),1);
+        const i = parseInt(btn.dataset.i,10);
+        if(btn.dataset.kind==='existing') existingMedia.splice(i,1);
+        else pendingImages.splice(i,1);
         renderThumbs();
         updateSubmitState();
       });
@@ -839,15 +895,15 @@
   }
 
   function updateSubmitState(){
-    fSubmit.disabled = !(fTitle.value.trim() && pendingImages.length>0);
+    fSubmit.disabled = !(fTitle.value.trim() && (existingMedia.length + pendingImages.length) > 0);
   }
   fTitle.addEventListener('input', updateSubmitState);
 
   fSubmit.addEventListener('click', async ()=>{
-    if(!fTitle.value.trim() || pendingImages.length===0) return;
+    if(!fTitle.value.trim() || (existingMedia.length + pendingImages.length)===0) return;
     fSubmit.disabled = true;
     try{
-      const media = [];
+      const uploaded = [];
       for(let i=0;i<pendingImages.length;i++){
         const item = pendingImages[i];
         fStatus.textContent = `Uploading ${item.type} ${i+1} of ${pendingImages.length}…`;
@@ -855,20 +911,26 @@
         const { error: uploadError } = await sb.storage.from(BUCKET).upload(fileName, item.blob, { contentType: item.contentType });
         if(uploadError) throw uploadError;
         const { data: urlData } = sb.storage.from(BUCKET).getPublicUrl(fileName);
-        media.push({ url: urlData.publicUrl, type: item.type });
+        uploaded.push({ url: urlData.publicUrl, type: item.type });
       }
+      const finalMedia = existingMedia.concat(uploaded);
       fStatus.textContent = 'Saving…';
-      const { error: insertError } = await sb.from(TABLE).insert([{
+      const payload = {
         title: fTitle.value.trim(),
         caption: fCaption.value.trim(),
-        image_url: media[0].url,
-        images: media
-      }]);
-      if(insertError) throw insertError;
-      fStatus.textContent = 'Published.';
+        image_url: finalMedia[0].url,
+        images: finalMedia
+      };
+      let saveError;
+      if(editingId){
+        ({ error: saveError } = await sb.from(TABLE).update(payload).eq('id', editingId));
+      } else {
+        ({ error: saveError } = await sb.from(TABLE).insert([payload]));
+      }
+      if(saveError) throw saveError;
+      fStatus.textContent = editingId ? 'Saved.' : 'Published.';
       await loadWorks();
-      fTitle.value=''; fCaption.value=''; pendingImages=[];
-      renderThumbs();
+      resetForm();
     }catch(e){
       fStatus.textContent = 'Error: ' + (e && e.message ? e.message : JSON.stringify(e));
     }
@@ -898,11 +960,16 @@
           <div class="ai-c fa-text">${escapeHtml(w.caption||'')}</div>
           <div class="ai-n">${media.length} item${media.length===1?'':'s'}</div>
         </div>
-        <button class="ai-del" type="button">Delete</button>`;
+        <div class="ai-actions">
+          <button class="ai-edit" type="button">Edit</button>
+          <button class="ai-del" type="button">Delete</button>
+        </div>`;
+      row.querySelector('.ai-edit').addEventListener('click', ()=> startEdit(w));
       row.querySelector('.ai-del').addEventListener('click', async ()=>{
         try{
           await sb.from(TABLE).delete().eq('id', w.id);
         }catch(e){}
+        if(editingId === w.id) resetForm();
         await loadWorks();
       });
       adminList.appendChild(row);
